@@ -724,7 +724,7 @@ Note that with UDP there is no handshaking between sending and receiving transpo
 DNS is an example of an application layer protocol that typically uses UDP: there is no handshaking and when a client doesn't receive a reply either it tries sending the query to another name server or it informs the invoking application that it can't get a reply. Why should a developer choose UDP?
 
  - *Finer application-level controll over what data is sent and when*: as soon as the application passes data to UDP, UDP will package the data inside a segment and immediately pass it to the network layer. TCP's congestion control can delay the sending of the segment and will try sending the packet until this is received. In real time applications the sending rate is important, so we can trade off some data loss for some sending rate.
- - *No connection establishement* UDP justs send data without any formal preliminaries without introducing any delay, probably the reason why DNS runs over UDP.
+ - *No connection establishement* UDP justs send data without any formal preliminaries without introducing any delay, probably the reason why DNS runs over UDP.HTTP uses TCP ratherthan UDP, since reliability is critical for Web pages with text.TCP connection-establishment delay in HTTP is an important contributor to the delays associated with downloading Web documents. Indeed, the QUIC protocol (Quick UDP Internet Connection, used in Google’s Chrome browser, uses UDP as its underlying transport protocol and implements reliability in an application-layer protocol on top of UDP.
  - *No connection state*: because a UDP application doesn't need to keep track of the users or to keep connections alive, it can typically support many more active clients than a TCP application
  - *Small packet header overhead* TCP has 20 bytes of header overhead in every segment versus the 8 of UDP
 
@@ -739,13 +739,19 @@ The UDP header has only four fields, each consisting of two bytes:
  - `destination port number`
  - `checksum` (used for error detection.)
  - `length` (which specifies the number of bytes in the UDP segment, header + data)
- 
+
 This `length` field is needed since the size of the data field may differ from one UDP segment to the next.
 
 ### 3.3.2 UDP Checksum
 Provides for error detection, to determine whether the bits in the segment have been altered as it moves from source to destination.
 
 At the send side, UDP performs the 1s complement of the sum of all the 16-bit (max 64) words in the segment, with any overflow encountered during the sum being wrapped around. This result is put in the checksum field of the UDP segment header.
+
+Note that this last addition had overflow, which was wrapped around. The 1s complement is obtained by
+converting all the 0s to 1s and converting all the 1s to 0s. Thus the 1s complement of the sum
+0100101011000010 is 1011010100111101, which becomes the checksum. At the receiver, all four 16-bit words are added, including the checksum. If no errors are introduced into the packet, then clearly the
+sum at the receiver will be 1111111111111111. If one of the bits is a 0, then we know that errors have
+been introduced into the packet.
 
 UDP implements error detection according to the **end-end principle**: certain functionality (error detection in this case) must be implemented on an end-end basis: "functions placed at the lower levels may be redundant or of little value when compared to the cost of providing them at the higher level".
 
