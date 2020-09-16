@@ -806,6 +806,9 @@ TCP is also **point-to-point**: a connection is always  between a *single sender
 Establishment of the connection: the client first sends a special TCP segment, the server responds with a second special TCP segment and the client answer again with a third special TCP segment. The first two cannot contain a payload while the third can. Three segments: **three-way handshake**.
 Both the sender and the receiver have buffers that are set up during the handshake.
 The maximum amount if data that can be grabbed and placed in a segment is limited by the **maximum segment size (MSS)**.
+
+The **MSS** is typically set by first determining the length of the largest link-layer frame that can be sent by the local sending host (the so-called **maximum transmission unit**, **MTU**), and then setting the MSS to ensure that a TCP segment (when encapsulated in an IP datagram) plus the TCP/IP header length (typically 40 bytes) will fit into a single link-layer frame. Note that the MSS is the maximum amount of application-layer data in the segment, not the maximum size of the TCP segment including headers.
+
 TCP therefore splits data into smaller chunks and pairs each chunk of client data with a TCP header thereby forming **TCP segments** which are passed down to the network layer. When TCP receives a segment at the other end, the segment's data is placed in the TCP connection's receive buffer. **Each side of the connection has its own send buffer and its own receive buffer**
 
 ### 3.5.2 TCP Segment Structure
@@ -831,6 +834,14 @@ EX 500,000 bytes, MSS = 1,000 bytes => 500 segments are created. First is number
 TCP is said to provide **cumulative acknowledgements**: if sender receives ACK 536 he will know that all the bytes from 0 to 535 have been well received.
 What does a host do when it receives out-of-order segments? The receiver buffers the out-of-order bytes and waits for the missing bytes to fill in the gaps.
 Usually both sides of a TCP connection randomly choose an initial sequence number **randomly** both for security and for minimizing the possibility that a segment that is still present in the network from an earlier, already terminated connection between two hosts is mistaken for a valid segment in a later connection between these same two hosts.
+
+For an example lets say client and server choose random no 40 and 70 so segment will be as follows
+
+C-S  seqno-40 ack-70
+
+S-C  seqno-70 ack-41 (acknowledgement for the previous segment **piggybacked** in this next segment )
+
+C-S  seqno-41 ack-71
 
 ### 3.5.3 Round-Trip Time Estimation and Timeout
 
@@ -942,6 +953,47 @@ The client decides to end the connection:
 
 #### What if the two ends are not ready for communication?
  A host receives a TCP segment whose port number or source IP address do not match with any of the ongoing sockets in the host -> the host sends a special reset segment to the source (RST flag bit set to 1) and drops the packet (UDP does responds with a special ICMP datagram)
+
+
+
+#### SYN-FLOOD ATTACK
+
+We’ve seen in our discussion of TCP’s three-way handshake that a server allocates and
+initializes connection variables and buffers in response to a received SYN. The server then
+sends a SYNACK in response, and awaits an ACK segment from the client. If the client does
+not send an ACK to complete the third step of this 3-way handshake, eventually (often after
+a minute or more) the server will terminate the half-open connection and reclaim the
+allocated resources.
+This TCP connection management protocol sets the stage for a classic Denial of Service
+(DoS) attack known as the SYN flood attack. In this attack, the attacker(s) send a large
+number of TCP SYN segments, without completing the third handshake step. With this
+deluge of SYN segments, the server’s connection resources become exhausted as they are
+allocated (but never used!) for half-open connections; legitimate clients are then denied
+service. Fortunately, an effective defense known as SYN cookies are now
+deployed in most major operating systems. SYN cookies work as follows:
+
+1. When the server receives a SYN segment, it does not know if the segment is comingfrom a legitimate user or is part of a SYN flood attack. So, instead of creating a half-open
+   TCP connection for this SYN, the server creates an initial TCP sequence number that is
+   a complicated function (hash function) of source and destination IP addresses and port
+   numbers of the SYN segment, as well as a secret number only known to the server. This
+   carefully crafted initial sequence number is the so-called “cookie.” The server then sends
+   the client a SYNACK packet with this special initial sequence number. Importantly, the
+   server does not remember the cookie or any other state information corresponding to the
+   SYN.
+2. A legitimate client will return an ACK segment. When the server receives this ACK, it
+   must verify that the ACK corresponds to some SYN sent earlier. But how is this done if
+   the server maintains no memory about SYN segments? As you may have guessed, it is
+   done with the cookie. Recall that for a legitimate ACK, the value in the acknowledgment
+   field is equal to the initial sequence number in the SYNACK (the cookie value in this
+   case) plus one . The server can then run the same hash function using
+   the source and destination IP address and port numbers in the SYNACK (which are the
+   same as in the original SYN) and the secret number. If the result of the function plus one
+   is the same as the acknowledgment (cookie) value in the client’s SYNACK, the server
+   concludes that the ACK corresponds to an earlier SYN segment and is hence valid. The
+   server then creates a fully open connection along with a socket.
+3. On the other hand, if the client does not return an ACK segment, then the original SYN
+   has done no harm at the server, since the server hasn’t yet allocated any resources in
+   response to the original bogus SYN
 
 ## 3.6 Principles of Congestion Control
 
